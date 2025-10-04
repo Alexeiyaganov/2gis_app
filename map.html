@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2GIS Map MiniApp</title>
+    <script src="https://maps.api.2gis.ru/2.0/loader.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+        }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        .header {
+            background: #0088cc;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .controls {
+            position: absolute;
+            top: 70px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #0088cc;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tg-button {
+            background: #2481cc;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        🗺️ Карта 2GIS в Telegram
+    </div>
+
+    <div class="controls">
+        <button onclick="findMyLocation()">📍 Мое местоположение</button>
+        <button onclick="searchPlace()">🔍 Поиск места</button>
+        <button class="tg-button" onclick="shareLocation()">📤 Поделиться локацией</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // Токен 2GIS
+        const DG_TOKEN = 'c2a3254a-5e7e-4d42-8414-5c35acdeae35';
+        let map;
+        let userMarker;
+
+        // Инициализация карты 2GIS
+        DG.then(function() {
+            map = DG.map('map', {
+                center: [55.7558, 37.6173], // Москва по умолчанию
+                zoom: 13
+            });
+
+            // Добавляем поиск 2GIS
+            DG.control.location({
+                position: 'topright'
+            }).addTo(map);
+
+            // Инициализация Telegram Web App
+            initTelegramApp();
+        });
+
+        // Инициализация Telegram Mini App
+        function initTelegramApp() {
+            if (window.Telegram && Telegram.WebApp) {
+                const tg = Telegram.WebApp;
+
+                // Инициализируем приложение
+                tg.ready();
+                tg.expand();
+
+                // Настраиваем кнопки
+                tg.MainButton.setText("Поделиться локацией").show();
+                tg.MainButton.onClick(shareLocation);
+
+                // Показываем кнопку назад
+                tg.BackButton.show();
+                tg.BackButton.onClick(function() {
+                    tg.close();
+                });
+
+                console.log('Telegram Web App initialized');
+            }
+        }
+
+        // Найти текущее местоположение
+        function findMyLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+
+                        // Удаляем предыдущий маркер
+                        if (userMarker) {
+                            map.removeLayer(userMarker);
+                        }
+
+                        // Устанавливаем вид на карте
+                        map.setView([lat, lng], 15);
+
+                        // Добавляем маркер
+                        userMarker = DG.marker([lat, lng]).addTo(map)
+                            .bindPopup('📍 Вы здесь!')
+                            .openPopup();
+                    },
+                    function(error) {
+                        alert('Не удалось определить местоположение. Проверьте разрешения GPS.');
+                    }
+                );
+            } else {
+                alert('Геолокация не поддерживается вашим браузером');
+            }
+        }
+
+        // Поиск места через 2GIS
+        function searchPlace() {
+            const query = prompt('Введите название места для поиска (например: "кафе", "аптека"):');
+            if (query) {
+                // Используем поиск 2GIS
+                DG.search(query, {
+                    map: map,
+                    zoom: 15
+                });
+            }
+        }
+
+        // Поделиться локацией в Telegram
+        function shareLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+
+                        // Отправляем данные в Telegram
+                        if (window.Telegram && Telegram.WebApp) {
+                            Telegram.WebApp.sendData(JSON.stringify({
+                                action: 'share_location',
+                                lat: lat,
+                                lng: lng,
+                                message: `Моя локация: ${lat.toFixed(6)}, ${lng.toFixed(6)}`
+                            }));
+                        } else {
+                            // Если не в Telegram, показываем координаты
+                            alert(`Ваши координаты:\nШирота: ${lat.toFixed(6)}\nДолгота: ${lng.toFixed(6)}`);
+                        }
+                    },
+                    function(error) {
+                        alert('Не удалось получить ваше местоположение');
+                    }
+                );
+            } else {
+                alert('Геолокация не поддерживается');
+            }
+        }
+
+        // Обработка сообщений от Telegram
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.ready();
+            }
+        });
+    </script>
+</body>
+</html>

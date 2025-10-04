@@ -159,6 +159,69 @@
             align-items: center;
             justify-content: center;
         }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .filter-section {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .filter-section h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .price-range {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .price-range input {
+            flex: 1;
+        }
+        .room-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .room-btn {
+            flex: 1;
+            min-width: 60px;
+            padding: 8px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .room-btn.active {
+            background: #0088cc;
+            color: white;
+            border-color: #0088cc;
+        }
+        .view-buttons {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+        }
+        .view-btn {
+            flex: 1;
+            padding: 8px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .view-btn.active {
+            background: #0088cc;
+            color: white;
+            border-color: #0088cc;
+        }
     </style>
 </head>
 <body>
@@ -171,50 +234,47 @@
         <button class="collapse-btn" onclick="toggleControls()">✕</button>
 
         <div class="search-form">
-            <h3>🔍 Поиск жилья</h3>
+            <h3>🔍 Фильтры поиска</h3>
 
-            <select id="districtSelect">
-                <option value="Северо-Западный">Северо-Западный округ</option>
-                <option value="ЦАО">Центральный округ (ЦАО)</option>
-                <option value="ЗАО">Западный округ (ЗАО)</option>
-            </select>
-
-            <input type="text" id="queryInput" placeholder="Например: студия с евроремонтом до 100000">
-
-            <div style="display: flex; gap: 10px;">
-                <div style="flex: 1;">
-                    <label>Макс. цена (руб):</label>
-                    <input type="number" id="maxPrice" placeholder="Бюджет" min="0" max="10000000" step="10000" value="500000">
-                </div>
-                <div style="flex: 1;">
-                    <label>Комнат:</label>
-                    <select id="roomsSelect">
-                        <option value="any">Любое</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4+</option>
-                    </select>
+            <div class="filter-section">
+                <h4>💰 Диапазон цены</h4>
+                <div class="price-range">
+                    <input type="number" id="minPrice" placeholder="От" min="0" max="10000000" value="0">
+                    <input type="number" id="maxPrice" placeholder="До" min="0" max="10000000" value="10000000">
                 </div>
             </div>
 
+            <div class="filter-section">
+                <h4>🚪 Количество комнат</h4>
+                <div class="room-buttons">
+                    <div class="room-btn active" data-rooms="any" onclick="selectRooms('any')">Любое</div>
+                    <div class="room-btn" data-rooms="1" onclick="selectRooms('1')">1</div>
+                    <div class="room-btn" data-rooms="2" onclick="selectRooms('2')">2</div>
+                    <div class="room-btn" data-rooms="3" onclick="selectRooms('3')">3</div>
+                    <div class="room-btn" data-rooms="4" onclick="selectRooms('4')">4+</div>
+                </div>
+            </div>
+
+            <div class="view-buttons">
+                <div class="view-btn active" data-view="markers" onclick="setViewMode('markers')">📌 Маркеры</div>
+                <div class="view-btn" data-view="heatmap" onclick="setViewMode('heatmap')">🔥 Тепловая карта</div>
+            </div>
+
             <button onclick="searchHousing()">🎯 Найти жилье</button>
-            <button onclick="findMyLocation()">📍 Мое местоположение</button>
-            <button onclick="clearSearch()">🗑️ Очистить</button>
+            <button onclick="loadAllOffers()">🔄 Показать все</button>
+            <button onclick="clearSearch()">🗑️ Сбросить</button>
         </div>
 
         <div class="stats" id="searchStats" style="display: none;">
             <div id="statsContent"></div>
         </div>
 
-        <div class="results" id="resultsContainer" style="display: none;">
-            <h4>🏘️ Найдено предложений: <span id="offersCount">0</span></h4>
-            <div id="offersList"></div>
-        </div>
-
-        <div id="districtInfo" style="display: none;">
-            <h4>📊 Информация о районе:</h4>
-            <div id="districtDetails"></div>
+        <div class="results" id="resultsContainer">
+            <div class="loading" id="loadingIndicator">Загрузка предложений...</div>
+            <div id="resultsContent" style="display: none;">
+                <h4>🏘️ Найдено предложений: <span id="offersCount">0</span></h4>
+                <div id="offersList"></div>
+            </div>
         </div>
 
         <button class="tg-button" onclick="shareLocation()">📤 Поделиться результатами</button>
@@ -229,12 +289,14 @@
         let userMarker;
         let currentOffers = [];
         let offerMarkers = [];
+        let heatmapLayer = null;
+        let currentViewMode = 'markers';
 
         // Инициализация карты 2GIS
         DG.then(function() {
             map = DG.map('map', {
-                center: [55.8, 37.4], // Северо-Западный округ по умолчанию
-                zoom: 12
+                center: [55.75, 37.6],
+                zoom: 11
             });
 
             // Добавляем поиск 2GIS
@@ -245,10 +307,8 @@
             // Инициализация Telegram Web App
             initTelegramApp();
 
-            // Автоматический поиск при загрузке
-            setTimeout(() => {
-                searchHousing();
-            }, 1000);
+            // Автоматическая загрузка всех предложений при старте
+            loadAllOffers();
         });
 
         // Инициализация Telegram Mini App
@@ -274,18 +334,32 @@
             }
         }
 
-        // Переключение видимости панели управления
-        function toggleControls() {
-            const panel = document.getElementById('controlsPanel');
-            panel.classList.toggle('collapsed');
+        // Загрузка всех предложений
+        async function loadAllOffers() {
+            showLoading(true);
+
+            try {
+                const response = await fetch('/api/all_offers');
+                const data = await response.json();
+                currentOffers = data.offers;
+
+                showSearchStats(data, true);
+                displayOffers(data.offers);
+                showOffersOnMap(data.offers);
+
+            } catch (error) {
+                console.error('Ошибка загрузки предложений:', error);
+                alert('Ошибка при загрузке предложений');
+            } finally {
+                showLoading(false);
+            }
         }
 
         // Поиск жилья
         async function searchHousing() {
-            const district = document.getElementById('districtSelect').value;
-            const query = document.getElementById('queryInput').value;
-            const maxPrice = document.getElementById('maxPrice').value;
-            const rooms = document.getElementById('roomsSelect').value;
+            const minPrice = parseInt(document.getElementById('minPrice').value) || 0;
+            const maxPrice = parseInt(document.getElementById('maxPrice').value) || 10000000;
+            const rooms = document.querySelector('.room-btn.active').dataset.rooms;
 
             showLoading(true);
 
@@ -296,9 +370,8 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        query: query,
-                        district: district,
-                        max_price: parseInt(maxPrice) || 500000,
+                        min_price: minPrice,
+                        max_price: maxPrice,
                         rooms: rooms
                     })
                 });
@@ -307,16 +380,13 @@
                 currentOffers = data.offers;
 
                 // Показываем статистику
-                showSearchStats(data);
-
-                // Показываем информацию о районе
-                showDistrictInfo(data.district_info);
+                showSearchStats(data, false);
 
                 // Показываем результаты
                 displayOffers(data.offers);
 
                 // Показываем на карте
-                showOffersOnMap(data.offers, data.district_info);
+                showOffersOnMap(data.offers);
 
             } catch (error) {
                 console.error('Ошибка поиска:', error);
@@ -327,7 +397,7 @@
         }
 
         // Показать статистику поиска
-        function showSearchStats(data) {
+        function showSearchStats(data, isAllOffers) {
             const statsContainer = document.getElementById('searchStats');
             const statsContent = document.getElementById('statsContent');
 
@@ -335,43 +405,27 @@
                 Math.round(data.offers.reduce((sum, offer) => sum + offer.price, 0) / data.offers.length) : 0;
             const avgArea = data.offers.length > 0 ?
                 Math.round(data.offers.reduce((sum, offer) => sum + offer.area, 0) / data.offers.length) : 0;
+            const avgScore = data.offers.length > 0 ?
+                Math.round(data.offers.reduce((sum, offer) => sum + offer.score, 0) / data.offers.length) : 0;
+
+            const title = isAllOffers ? "📈 Все предложения:" : "📈 Статистика поиска:";
 
             statsContent.innerHTML = `
-                <strong>📈 Статистика поиска:</strong><br>
+                <strong>${title}</strong><br>
                 • Найдено: ${data.total_found} предложений<br>
                 • Показано: ${data.offers.length} лучших<br>
                 • Средняя цена: ${avgPrice.toLocaleString()} руб<br>
-                • Средняя площадь: ${avgArea} м²
+                • Средняя площадь: ${avgArea} м²<br>
+                • Средний рейтинг: ${avgScore}/100
             `;
 
             statsContainer.style.display = 'block';
         }
 
-        // Показать информацию о районе
-        function showDistrictInfo(districtInfo) {
-            const container = document.getElementById('districtInfo');
-            const details = document.getElementById('districtDetails');
-
-            details.innerHTML = `
-                <div style="font-size: 14px;">
-                    <p><strong>${districtInfo.name}</strong></p>
-                    <p>${districtInfo.description}</p>
-                    <p>🚇 Метро: ${districtInfo.metro_stations.slice(0, 4).join(', ')}</p>
-                    <p>🏞️ Парки: ${districtInfo.parks.slice(0, 2).join(', ')}</p>
-                    <div style="display: flex; justify-content: space-between; margin-top: 8px;">
-                        <span>🏗️ ${districtInfo.infrastructure_score}/100</span>
-                        <span>🌿 ${districtInfo.ecology_score}/100</span>
-                        <span>🚌 ${districtInfo.transport_score}/100</span>
-                    </div>
-                </div>
-            `;
-
-            container.style.display = 'block';
-        }
-
         // Отобразить предложения
         function displayOffers(offers) {
-            const container = document.getElementById('resultsContainer');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const resultsContent = document.getElementById('resultsContent');
             const list = document.getElementById('offersList');
             const countElement = document.getElementById('offersCount');
 
@@ -380,38 +434,47 @@
 
             if (offers.length === 0) {
                 list.innerHTML = '<p style="text-align: center; color: #666;">😔 Подходящих предложений не найдено</p>';
-                container.style.display = 'block';
-                return;
+            } else {
+                offers.forEach((offer, index) => {
+                    const offerElement = document.createElement('div');
+                    offerElement.className = `offer ${getOfferClass(offer.score)}`;
+                    offerElement.innerHTML = `
+                        <div class="score">${offer.score}</div>
+                        <div class="price">${offer.price.toLocaleString()} руб</div>
+                        <div class="offer-title">${offer.title || 'Квартира'}</div>
+                        <div class="offer-details">
+                            🏠 ${offer.rooms} комн. • ${offer.area} м² • ${offer.price_per_m2?.toLocaleString()} руб/м²<br>
+                            🚇 ${offer.metro || 'Метро'} • ${offer.metro_time} мин пешком<br>
+                            📍 ${offer.address.split(', ').slice(-2).join(', ')}<br>
+                            🏘️ ${offer.district || 'Район не указан'}
+                        </div>
+                    `;
+
+                    offerElement.onclick = () => showOfferOnMap(offer, index);
+                    list.appendChild(offerElement);
+                });
             }
 
-            offers.forEach((offer, index) => {
-                const offerElement = document.createElement('div');
-                offerElement.className = `offer ${getOfferClass(offer.score)}`;
-                offerElement.innerHTML = `
-                    <div class="score">${offer.score}</div>
-                    <div class="price">${offer.price.toLocaleString()} руб</div>
-                    <div class="offer-title">${offer.title || 'Квартира'}</div>
-                    <div class="offer-details">
-                        🏠 ${offer.rooms} комн. • ${offer.area} м² • ${offer.price_per_m2?.toLocaleString()} руб/м²<br>
-                        🚇 ${offer.metro || 'Метро'} • ${offer.metro_time} мин пешком<br>
-                        📍 ${offer.address.split(', ').slice(-2).join(', ')}
-                    </div>
-                `;
-
-                offerElement.onclick = () => showOfferOnMap(offer, index);
-                list.appendChild(offerElement);
-            });
-
-            container.style.display = 'block';
+            loadingIndicator.style.display = 'none';
+            resultsContent.style.display = 'block';
         }
 
         // Показать предложения на карте
-        function showOffersOnMap(offers, districtInfo) {
+        function showOffersOnMap(offers) {
             // Очищаем предыдущие маркеры
             clearOfferMarkers();
+            clearHeatmap();
 
             if (offers.length === 0) return;
 
+            if (currentViewMode === 'markers') {
+                showMarkers(offers);
+            } else {
+                showHeatmap(offers);
+            }
+        }
+
+        function showMarkers(offers) {
             // Добавляем маркеры предложений
             offers.forEach((offer, index) => {
                 const marker = DG.marker(offer.coordinates)
@@ -423,136 +486,7 @@
                             <p>${offer.area} м² • ${offer.price_per_m2?.toLocaleString()} руб/м²</p>
                             <p>${offer.address}</p>
                             <p>🚇 ${offer.metro || 'Метро'} • ${offer.metro_time} мин пешком</p>
+                            <p>🏘️ ${offer.district || 'Район не указан'}</p>
                             <p>⭐ Рейтинг: ${offer.score}</p>
                             ${offer.title ? `<p><em>${offer.title}</em></p>` : ''}
-                            <button onclick="selectOffer(${index})" style="width: 100%; padding: 8px; background: #0088cc; color: white; border: none; border-radius: 4px; cursor: pointer;">Выбрать</button>
-                        </div>
-                    `);
-
-                // Разный цвет маркеров в зависимости от рейтинга
-                const markerIcon = marker.getElement().querySelector('.leaflet-marker-icon');
-                if (offer.score > 70) {
-                    markerIcon.style.filter = 'hue-rotate(120deg)'; // Зеленый
-                } else if (offer.score > 50) {
-                    markerIcon.style.filter = 'hue-rotate(60deg)'; // Желтый
-                } else {
-                    markerIcon.style.filter = 'hue-rotate(0deg)'; // Красный
-                }
-
-                offerMarkers.push(marker);
-            });
-
-            // Центрируем карту на первом предложении
-            if (offers.length > 0) {
-                map.setView(offers[0].coordinates, 13);
-            }
-        }
-
-        // Очистить маркеры предложений
-        function clearOfferMarkers() {
-            offerMarkers.forEach(marker => {
-                map.removeLayer(marker);
-            });
-            offerMarkers = [];
-        }
-
-        // Показать конкретное предложение
-        function showOfferOnMap(offer, index) {
-            map.setView(offer.coordinates, 16);
-            // Открываем popup маркера
-            if (offerMarkers[index]) {
-                offerMarkers[index].openPopup();
-            }
-        }
-
-        function selectOffer(index) {
-            const offer = currentOffers[index];
-            alert(`🏠 Выбрана квартира:\n${offer.title || 'Квартира'}\n📍 ${offer.address}\n💰 ${offer.price.toLocaleString()} руб\n📏 ${offer.area} м²`);
-        }
-
-        function getOfferClass(score) {
-            if (score > 70) return 'offer-high';
-            if (score > 50) return 'offer-medium';
-            return 'offer-low';
-        }
-
-        // Найти текущее местоположение
-        function findMyLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-
-                        // Удаляем предыдущий маркер
-                        if (userMarker) {
-                            map.removeLayer(userMarker);
-                        }
-
-                        // Устанавливаем вид на карте
-                        map.setView([lat, lng], 15);
-
-                        // Добавляем маркер
-                        userMarker = DG.marker([lat, lng]).addTo(map)
-                            .bindPopup('📍 Вы здесь!')
-                            .openPopup();
-                    },
-                    function(error) {
-                        alert('Не удалось определить местоположение. Проверьте разрешения GPS.');
-                    }
-                );
-            } else {
-                alert('Геолокация не поддерживается вашим браузером');
-            }
-        }
-
-        // Очистить поиск
-        function clearSearch() {
-            document.getElementById('queryInput').value = '';
-            document.getElementById('maxPrice').value = '500000';
-            document.getElementById('roomsSelect').value = 'any';
-            document.getElementById('resultsContainer').style.display = 'none';
-            document.getElementById('searchStats').style.display = 'none';
-            document.getElementById('districtInfo').style.display = 'none';
-            clearOfferMarkers();
-            currentOffers = [];
-        }
-
-        // Показать/скрыть загрузку
-        function showLoading(show) {
-            // Можно добавить индикатор загрузки
-            if (show) {
-                console.log('Загрузка...');
-            }
-        }
-
-        // Поделиться результатами
-        function shareLocation() {
-            if (currentOffers.length === 0) {
-                alert('Сначала выполните поиск жилья');
-                return;
-            }
-
-            const bestOffer = currentOffers[0];
-            const message = `🏠 Лучшее предложение: ${bestOffer.rooms} комн. за ${bestOffer.price.toLocaleString()} руб\n📍 ${bestOffer.address}\n⭐ Рейтинг: ${bestOffer.score}\n📏 ${bestOffer.area} м²`;
-
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.sendData(JSON.stringify({
-                    action: 'share_housing',
-                    offer: bestOffer,
-                    message: message
-                }));
-            } else {
-                alert(message);
-            }
-        }
-
-        // Обработка сообщений от Telegram
-        document.addEventListener('DOMContentLoaded', function() {
-            if (window.Telegram && Telegram.WebApp) {
-                Telegram.WebApp.ready();
-            }
-        });
-    </script>
-</body>
-</html>
+                            <button onclick="selectOffer(${index})"
